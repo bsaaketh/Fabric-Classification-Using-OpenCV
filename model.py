@@ -55,8 +55,8 @@ def load_dataset(dataset_path, classes=None):
 
 
 # ── Dataset ──────────────────────────────────────────────────────────────────
-dataset_path = os.path.join(os.path.dirname(__file__), "datasets")
-TARGET_CLASSES = ["Cotton", "Denim", "Leather", "Nylon", "Wool"]
+dataset_path = os.path.join(os.path.dirname(__file__), "TFD Textile Dataset")
+TARGET_CLASSES = None  # use all 10 TFD fabric types (001-010)
 
 print("Loading dataset...")
 X, y = load_dataset(dataset_path, classes=TARGET_CLASSES)
