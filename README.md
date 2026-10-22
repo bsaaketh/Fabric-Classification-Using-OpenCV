@@ -1,151 +1,97 @@
-# Robust Offline Signature Verification Using Hu and Zernike Moments
+# Fabric Classification Using OpenCV
 
-An offline handwritten signature verification system that classifies a scanned signature as **Genuine** or **Forged**. It fuses shape, texture and structural features, centred on Hu and Zernike moments, and classifies them with a tuned **RBF-kernel SVM**. A Random Forest is trained as a baseline. A **Streamlit** app gives instant verdicts with confidence scores.
+A computer-vision system that identifies the fabric type of a textile image using **Local Binary Pattern (LBP)** texture features. It trains an **SVM (RBF)** and a **Random Forest**, keeps the better one, and serves it through a **Streamlit** app with per-class probabilities.
 
-**Results on GPDS-150 (3,300 held-out test signatures):**
+**Results on the Ten Fabrics Dataset (TFD), 10 fabric types, 594 held-out images:**
 
-| Model | Accuracy | F1 (forged) | F1 (genuine) | FAR | FRR |
-|---|---|---|---|---|---|
-| **SVM (RBF)** | **84.6%** | **0.87** | **0.80** | **16.6%** | **13.3%** |
-| Random Forest (baseline) | 80.0% | 0.84 | 0.73 | 17.7% | 24.2% |
+| Model | Test accuracy | Macro F1 |
+|---|---|---|
+| SVM (RBF, C=10) | **100.0%** | 1.000 |
+| Random Forest (200 trees) | **100.0%** | 1.000 |
 
-<p align="center">
-  <img src="assets/demo_forged.png" width="45%" alt="Forged prediction"/>
-  &nbsp;
-  <img src="assets/demo_genuine.png" width="45%" alt="Genuine prediction"/>
-</p>
+![Fabric types](assets/fabric_samples.png)
+
+Developed as an Industrial-Oriented Mini Project for the B.Tech in Computer Science and Engineering (AI & ML).
 
 ---
 
 ## Features
 
-- Offline (image-based) signature verification
-- Robust preprocessing: Otsu binarization, morphological closing, cropping and aspect-preserving centring
-- **Fused 575-dimensional feature vector**: Hu moments, Zernike moments, LBP texture, grid-directional (HOG-lite) and skeleton structure
-- **SVM (RBF)** pipeline with StandardScaler → PCA (95% variance) → 5-fold grid search over C and γ
-- **Random Forest** baseline with feature-importance ranking
-- Biometric metrics (FAR, FRR) plus a confidence "uncertain band" (0.40–0.60) that flags signatures for manual review
-- Feature config saved inside the model, so training and inference always match
-- Streamlit app showing the original, preprocessed and gradient-magnitude views alongside the verdict
+- Texture-based classification from a compact **26-dimensional LBP histogram**
+- SVM (RBF) and Random Forest compared on the same stratified split, with the better model saved automatically
+- Reproducible results from fixed random seeds
+- Streamlit app showing the predicted fabric, its confidence, and probabilities for every class
 
-## System Workflow
+## Working Pipeline
 
-![Pipeline](assets/workflow.png)
-
-## Methodology
-
-### 1. Preprocessing
-
-- Median blur for denoising
-- Otsu thresholding, inverted to white strokes on black
-- Morphological closing, with a kernel that scales with image resolution
-- Crop to the signature's bounding box, resize preserving aspect ratio, and centre on a 256×256 canvas
-
-### 2. Feature Extraction
-
-| Feature | Dims | What it captures |
-|---|---|---|
-| **Hu moments** | 7 | Global shape; invariant to translation, scale and rotation |
-| **Zernike moments** (degree 8) | 25 | Fine shape detail; rotation-invariant |
-| **LBP histogram** (R=3, P=24) | 26 | Local stroke texture |
-| **HOG-lite** (8×8 grid × 8 bins) | 512 | Spatial layout of stroke directions |
-| **Skeleton features** | 5 | Stroke length, endpoints, branch points, branch/endpoint ratio, coverage |
-| **Total** | **575** | |
-
-### 3. Feature Fusion
-
-All features are concatenated, standardized, and reduced with PCA to keep 95% of the variance (575 → 409 dimensions).
-
-### 4. Classification
-
-- **Main model:** SVM with RBF kernel. A 5-fold stratified grid search over C ∈ {0.1, 1, 10, 100} and γ ∈ {scale, 0.1, 0.01, 0.001} optimizes F1. **Best: C = 10, γ = 0.001.**
-- **Baseline:** Random Forest (300 trees, balanced class weights, min_samples_leaf = 2).
-
-## Dataset
-
-The dataset is **not included in this repository** because of licensing and distribution restrictions.
-
-The models were trained on the **GPDS Signature Database (GPDS 1-150)**, which has genuine signatures and skilled forgeries from 150 writers. Download it [from Kaggle](https://www.kaggle.com/datasets/adeelajmal/gpds-1150?select=New+folder+%2810%29).
-
-![Dataset samples](assets/dataset_samples.png)
-
-| Split | Genuine | Forged | Total |
-|---|---|---|---|
-| Train (samples 1–16 per writer) | 2,400 | 2,400 | 4,800 |
-| Test (samples 17–24 per writer) | 1,200 | 2,100 | 3,300 |
-
-Both splits contain all 150 writers, with no overlapping images. This is a **writer-dependent** evaluation: the model has seen other signatures from each person during training.
-
-The loader searches subfolders recursively for directories named `genuine` and `forge`, so the Kaggle layout works as it is:
-
-```text
-dataset/
-├── train/
-│   ├── genuine/
-│   └── forge/
-└── test/
-    ├── 1/
-    │   ├── genuine/
-    │   └── forge/
-    ├── 2/
-    │   ...
-```
+1. **Load:** images are read from one folder per fabric type and resized to 128×128
+2. **Extract features:** grayscale conversion, then a uniform LBP (radius 3, 24 points) turned into a normalized 26-bin histogram
+3. **Split:** stratified 80:20 train/test split (2,375 / 594 images)
+4. **Train:** SVM (RBF, C=10, γ=scale) and Random Forest (200 trees)
+5. **Select:** the higher-accuracy model is saved as `fabric_classifier_model.pkl`, with `label_encoder.pkl`
+6. **Predict:** the Streamlit app applies the same resizing and LBP extraction to an uploaded image
 
 ## Results
 
-### Test set (3,300 signatures)
+### Test set (stratified 80:20 split)
 
-| | SVM (RBF) | Random Forest |
+Both models classify all 594 test images correctly.
+
+<img src="assets/confusion_matrix.png" width="460" alt="Confusion matrix: all predictions on the diagonal"/>
+
+### Robustness checks
+
+TFD patches are cut from one scan per fabric, with 10% overlap between neighbouring patches. A random split can therefore place near-duplicate patches in both train and test. To check that the result isn't caused by that leakage, the models were also evaluated in two stricter ways:
+
+| Evaluation | SVM | Random Forest |
 |---|---|---|
-| Accuracy | **84.6%** | 80.0% |
-| Precision (genuine) | 0.75 | 0.71 |
-| Recall (genuine) | 0.87 | 0.76 |
-| F1 (genuine) | 0.80 | 0.73 |
-| Precision (forged) | 0.92 | 0.86 |
-| Recall (forged) | 0.83 | 0.82 |
-| F1 (forged) | 0.87 | 0.84 |
-| **FAR** (forgeries accepted) | **16.6%** | 17.7% |
-| **FRR** (genuine rejected) | **13.3%** | 24.2% |
+| 5-fold stratified cross-validation | 99.8% ± 0.2 | 99.97% ± 0.07 |
+| **Region hold-out:** train on the first 80% of each fabric's patches, test on the last 20% (a separate area of the scan) | 100.0% | 100.0% |
+| Region hold-out, reversed: test on the first 20% | 99.3% | 100.0% |
 
-![Confusion matrices](assets/confusion_matrix.png)
+Accuracy stays at or above 99% when whole regions of each fabric are unseen during training. So the result reflects real texture differences, not memorized overlapping patches.
 
-The SVM's biggest gain over the Random Forest is on genuine signatures: it **cuts false rejections by almost half** (FRR 24.2% → 13.3%) while also accepting fewer forgeries.
+> **Note:** each TFD class is a single fabric from one factory scan, which makes this an easy benchmark. Expect lower accuracy on photos of other fabrics, or under different lighting or scale. See Future Improvements.
 
-### Confidence-based review band
+## Dataset
 
-Predictions with confidence between 0.40 and 0.60 are flagged **"Uncertain: manual review recommended"** instead of getting a hard verdict.
+[**Ten Fabrics Dataset (TFD)**](https://www.kaggle.com/datasets/saharshakir/ten-fabrics-dataset-tfd): 2,969 scanned 256×256 textile patches across 10 fabric types, labelled `001`–`010`. It was originally built for defect detection, and about 25% of the patches contain defects; they are kept here as normal samples of their fabric type.
 
-| | SVM (RBF) | Random Forest |
-|---|---|---|
-| Flagged for review | 10.0% | 28.2% |
-| Accuracy on the remaining signatures | **88.4%** | 87.1% |
-| FAR / FRR on the remaining signatures | 11.9% / 11.3% | 11.4% / 15.7% |
+| Type | 001 | 002 | 003 | 004 | 005 | 006 | 007 | 008 | 009 | 010 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Images | 154 | 136 | 144 | 396 | 110 | 345 | 760 | 329 | 367 | 228 |
 
-Sending the least certain 10% of signatures to a human raises SVM accuracy from 84.6% to 88.4%.
+The dataset is **not included in this repository**. Download it from Kaggle and extract it so the folder sits next to `model.py`:
 
-## Technology Stack
+```text
+TFD Textile Dataset/
+├── 001/
+├── 002/
+│   ...
+└── 010/
+```
+
+## Technologies Used
 
 **Language:** Python
 
-**Libraries:** OpenCV · NumPy · scikit-learn · scikit-image · Mahotas · Streamlit · Pillow · Matplotlib · Joblib · tqdm
+**Libraries:** OpenCV · NumPy · scikit-learn · scikit-image · Streamlit · Pillow · Joblib
 
 ## Installation
 
 ```bash
-git clone https://github.com/bsaaketh/Signature-Verification-Using-A-Fusion-Of-Hu-And-Zernike-Moments.git
-cd Signature-Verification-Using-A-Fusion-Of-Hu-And-Zernike-Moments
+git clone https://github.com/bsaaketh/Fabric-Classification-Using-OpenCV.git
+cd Fabric-Classification-Using-OpenCV
 pip install -r requirements.txt
 ```
 
 ### Train the model
 
-Set `DATASET_ROOT` at the top of `model.py` to your dataset folder, then run:
-
 ```bash
 python model.py
 ```
 
-This saves `svm_signature_pipeline.joblib` (main model) and `rf_signature_pipeline.joblib` (baseline), and prints the full metrics for both.
+This prints accuracy and a classification report for both models, then saves `fabric_classifier_model.pkl`, `label_encoder.pkl`, `fabric_svm_model.pkl` and `fabric_rf_model.pkl`.
 
 ### Run the app
 
@@ -153,24 +99,25 @@ This saves `svm_signature_pipeline.joblib` (main model) and `rf_signature_pipeli
 streamlit run app.py
 ```
 
-The app loads `svm_signature_pipeline.joblib` by default. You can switch models from the sidebar.
-
 ## Project Structure
 
 ```text
-signature-verification/
-├── dataset/            # not included, see Dataset
-│   ├── train/
-│   └── test/
-├── app.py              # Streamlit interface
-├── model.py            # feature extraction, training, evaluation
+Fabric-Classification-Using-OpenCV/
+├── TFD Textile Dataset/     # not included, see Dataset
+├── app.py                   # Streamlit interface
+├── model.py                 # LBP features, SVM + RF training, model selection
 ├── requirements.txt
-├── assets/             # README images
+├── assets/                  # README images
 └── README.md
 ```
 
-## Future Work
+## Applications
 
-- Writer-independent evaluation, testing on writers never seen in training
-- CNN or Siamese network to learn features directly from signature images
-- Tune the decision threshold to trade FAR against FRR for banking use
+Textile manufacturing · automated quality control · inventory management · e-commerce product tagging
+
+## Future Improvements
+
+- Test on photos of fabrics outside TFD, under varied lighting and scale
+- Add named material classes (cotton, denim, silk, wool…) from a multi-source dataset
+- Combine LBP with GLCM, Gabor and color features, or move to CNN transfer learning
+- Use TFD's defect labels to add defect detection
