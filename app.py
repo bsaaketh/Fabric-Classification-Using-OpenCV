@@ -26,7 +26,7 @@ def extract_lbp_features(image):
 
 st.set_page_config(page_title="Fabric Classifier", page_icon="🧵", layout="centered")
 st.title("🧵 Fabric Type Classifier")
-st.write("Upload a fabric image to identify its material type.")
+st.write("Upload a fabric image to identify its fabric type (TFD types 001–010).")
 
 uploaded_file = st.file_uploader("Choose a fabric image", type=["jpg", "jpeg", "png"])
 
@@ -35,6 +35,7 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
     image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    image_cv = cv2.resize(image_cv, (128, 128))  # match training size in model.py
     features = extract_lbp_features(image_cv)
 
     pred_encoded = model.predict(features)[0]
