@@ -2,7 +2,6 @@ opencv-python
 numpy
 scikit-learn
 scikit-image
-xgboost
 joblib
 streamlit
 Pillow
